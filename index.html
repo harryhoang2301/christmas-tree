@@ -1,0 +1,766 @@
+<!doctype html>
+<html lang="en" data-theme="midnight">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ASCII Christmas Tree</title>
+<meta name="description" content="A spinning ASCII Christmas tree. Tap it to connect on LinkedIn.">
+<style>
+  :root[data-theme="midnight"] {
+    --bg: radial-gradient(ellipse at top, #1b2350 0%, #0b1026 60%, #05070f 100%);
+    --fg: #e8ecff; --muted: #9aa3c7;
+    --btn-bg: rgba(255,255,255,.08); --btn-border: rgba(255,255,255,.18);
+    --glow-opacity: .6;
+  }
+  :root[data-theme="snow"] {
+    --bg: linear-gradient(#f7fafd, #dfe8f1);
+    --fg: #1b2433; --muted: #5b6676;
+    --btn-bg: rgba(0,0,0,.05); --btn-border: rgba(0,0,0,.15);
+    --glow-opacity: 0;
+  }
+  :root[data-theme="cozy"] {
+    --bg: radial-gradient(ellipse at top, #7a1620 0%, #4a0d12 60%, #2a0609 100%);
+    --fg: #ffe8d6; --muted: #e0b8a8;
+    --btn-bg: rgba(255,255,255,.08); --btn-border: rgba(255,232,214,.25);
+    --glow-opacity: .55;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; min-height: 100%; }
+  body {
+    background: var(--bg); background-attachment: fixed; background-color: #0b1026;
+    color: var(--fg);
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    min-height: 100dvh;
+    display: flex; align-items: center; justify-content: center;
+    padding: 16px; overflow-x: hidden;
+  }
+  main { width: 100%; max-width: 680px; display: flex; flex-direction: column; align-items: center; gap: 12px; }
+  h1 { margin: 0; font-size: clamp(1.3rem, 5vw, 1.9rem); font-weight: 600; letter-spacing: .02em; text-align: center; }
+
+  #stage {
+    position: relative; line-height: 0; cursor: pointer; outline: none; border-radius: 16px;
+    user-select: none; -webkit-tap-highlight-color: transparent; touch-action: manipulation;
+  }
+  #stage:focus-visible { box-shadow: 0 0 0 2px var(--muted); }
+  #art { position: relative; display: block; }
+  #glow {
+    position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none;
+    filter: blur(7px) saturate(1.6); opacity: calc(var(--glow-opacity) * var(--glow-k, 1));
+  }
+
+  #hint { margin: 0; min-height: 1.4em; color: var(--muted); font-size: .95rem; text-align: center; }
+  #hint a { color: inherit; }
+
+  .controls { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
+  .controls button {
+    font: inherit; font-size: 1rem; color: var(--fg);
+    background: var(--btn-bg); border: 1px solid var(--btn-border);
+    padding: 12px 18px; min-height: 48px; border-radius: 999px; cursor: pointer;
+  }
+  .controls button:active { transform: scale(.97); }
+</style>
+</head>
+<body>
+<main>
+  <h1>Merry Christmas 🎄</h1>
+  <div id="stage" role="button" tabindex="0" aria-label="Spinning Christmas tree. Activate to show a QR code linking to LinkedIn.">
+    <canvas id="glow" aria-hidden="true"></canvas>
+    <canvas id="art" aria-hidden="true"></canvas>
+  </div>
+  <p id="hint">tap the tree ✨</p>
+  <div class="controls">
+    <button id="paletteBtn" type="button"></button>
+    <button id="shuffleBtn" type="button" aria-label="Shuffle the decorations">🎲</button>
+    <button id="themeBtn" type="button"></button>
+    <button id="motionBtn" type="button" hidden></button>
+  </div>
+</main>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
+<script>
+// ── The one thing you'll want to change later ──────────────────────────────
+const QR_LINK = "https://www.linkedin.com/in/harry-hoang23/";
+// ───────────────────────────────────────────────────────────────────────────
+
+// foliage: [shadow, highlight] · gifts: [box, ribbon]
+// qr: dark/accent are the module and corner colours on the light page (keep them dark); ink is the hue of the characters on the tiles
+const PALETTES = {
+  Classic: {
+    foliage: ["#114a26", "#5df089"], trunk: "#9a6534", star: "#ffe066", tinsel: ["#ffd166", "#dfe9ff"],
+    baubles: ["#ff3b4e", "#ffd166", "#4cc9f0", "#ff7ad9"],
+    gifts: [["#d62839", "#ffe066"], ["#2a7de1", "#ffffff"], ["#8e44ad", "#ffd166"], ["#f2f2f2", "#d62839"]],
+    qr: { dark: "#0b3d20", accent: "#9e1226", ink: "#ff7a1a" },
+  },
+  Icy: {
+    foliage: ["#12395e", "#9bdcff"], trunk: "#8d99ae", star: "#e8fbff", tinsel: ["#c8f1ff", "#ffffff"],
+    baubles: ["#ffffff", "#90e0ef", "#b8c0ff", "#48cae4"],
+    gifts: [["#3a86ff", "#ffffff"], ["#b8c0ff", "#3a0ca3"], ["#e0fbfc", "#48cae4"], ["#5e60ce", "#caf0f8"]],
+    qr: { dark: "#0b2545", accent: "#1d4e89", ink: "#c9a0ff" },
+  },
+  Neon: {
+    foliage: ["#0c4a3a", "#2dffb0"], trunk: "#b026ff", star: "#fffb00", tinsel: ["#ff3df2", "#00e5ff"],
+    baubles: ["#ff00ff", "#00e5ff", "#fffb00", "#ff3864"],
+    gifts: [["#ff00ff", "#00e5ff"], ["#00e5ff", "#fffb00"], ["#fffb00", "#ff00ff"], ["#ff3864", "#ffffff"]],
+    qr: { dark: "#2a0845", accent: "#7a0064", ink: "#ff3df2" },
+  },
+  "Candy Cane": {
+    foliage: ["#8a1230", "#ffd9e0"], trunk: "#c9184a", star: "#ffd166", tinsel: ["#ffffff", "#ff4d6d"],
+    baubles: ["#ffffff", "#2ec4b6", "#ffd166", "#ff0a54"],
+    gifts: [["#ffffff", "#ff0a54"], ["#ff0a54", "#ffffff"], ["#2ec4b6", "#ffffff"], ["#ffb3c1", "#c9184a"]],
+    qr: { dark: "#7d0a1e", accent: "#0b5c55", ink: "#ff0a54" },
+  },
+};
+const THEMES = {
+  midnight: { label: "🌙 Midnight", snow: "#ffffff" },
+  snow:     { label: "❄️ Snow",     snow: "#8192a8", light: true },
+  cozy:     { label: "🔥 Cosy",     snow: "#fff1e0" },
+};
+
+// ── Scene dimensions. One grid cell is 1 unit wide and 2 units tall. ──
+const COLS = 61, ROWS = 40, MID = 30, TOP = 4;         // TOP = grid row of the tree's apex
+const TREE_ROWS = 27, FLOOR_Y = 31.2, R_BASE = 20, TIERS = 5;
+const TILT = 0.12;                                      // camera pitch: rows gained per unit of depth
+const LIGHT = [-0.4, 0.45, 0.8];                        // from upper-left, towards the viewer
+
+// ── Intro timeline, in seconds of scene time ──
+const GROW_END = 1.5;
+const TINSEL_START = [1.2, 1.6], TINSEL_FLOW = 2.4;
+const GIFT_SHAPES = [[3.6, 3.2, 3.6], [2.6, 2.4, 2.6], [3.1, 3, 2.4], [2.4, 3.4, 2.4], [3.8, 2.2, 2.9], [2.9, 2.9, 2.9], [2.4, 2, 2.4]]; // half-width, height in rows, half-depth
+const GIFT_T0 = 3.9, GIFT_GAP = 0.6, GIFT_POP = 0.55;
+const SPIN_INTRO = 1.1, SPIN_IDLE = 0.5;                // radians per second
+const SETTLE_AT = GIFT_T0 + GIFT_SHAPES.length * GIFT_GAP + 0.2;
+const MORPH_SEC = 1.8, MORPH_STAGGER = 0.3;
+
+const FOL_RAMP = ".,:;^^**%%#&@";
+const GROUND_RAMP = "..,,__--~~";
+const SPARK = "+*x=#";
+const STAR = [" \\|/ ", "-=*=-", " /|\\ "];
+const FONT_STACK = 'ui-monospace, "Cascadia Mono", Consolas, "SFMono-Regular", Menlo, "Courier New", monospace';
+
+// colour slots: each has 8 brightness levels in colorTable
+const S_FOL = 0, S_TRUNK = 1, S_STAR = 2, S_TIN = 3, S_SNOW = 5, S_BAUB = 6, S_GIFT = 10;
+const FOLIAGE = 0, TRUNK = 1, GROUND = 2, TINSEL = 3, PRESENT = 4;
+const C_BAUBLE = 6, C_LIGHT = 7, C_STAR = 8, C_FX = 9;      // kindBuf holds a point kind + 1, or one of these
+
+const art = document.getElementById("art"), glow = document.getElementById("glow");
+const ctx = art.getContext("2d"), gctx = glow.getContext("2d");
+const stage = document.getElementById("stage"), hint = document.getElementById("hint");
+const paletteBtn = document.getElementById("paletteBtn"), themeBtn = document.getElementById("themeBtn");
+const motionBtn = document.getElementById("motionBtn");
+const prefersReduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+// ── Small maths helpers ──
+const clamp01 = (x) => (x < 0 ? 0 : x > 1 ? 1 : x);
+const smooth = (a, b, x) => { const t = clamp01((x - a) / (b - a)); return t * t * (3 - 2 * t); };
+const easeOutCubic = (t) => 1 - Math.pow(1 - t, 3);
+const easeInOutCubic = (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
+const frac = (x) => x - Math.floor(x);
+
+function mulberry32(a) {
+  return () => { a = (a + 0x6D2B79F5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+}
+const rng = mulberry32(20261225);   // fixed seed: the tree has the same shape on every visit
+
+function hash3(x, y, z) {
+  let h = (Math.imul(x, 374761393) + Math.imul(y, 668265263) + Math.imul(z, 1440662683)) | 0;
+  h = Math.imul(h ^ (h >>> 13), 1274126177);
+  return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+}
+function noise3(x, y, z) {
+  const xi = Math.floor(x), yi = Math.floor(y), zi = Math.floor(z);
+  let xf = x - xi, yf = y - yi, zf = z - zi;
+  xf = xf * xf * (3 - 2 * xf); yf = yf * yf * (3 - 2 * yf); zf = zf * zf * (3 - 2 * zf);
+  const l = (a, b, t) => a + (b - a) * t;
+  return l(
+    l(l(hash3(xi, yi, zi), hash3(xi + 1, yi, zi), xf), l(hash3(xi, yi + 1, zi), hash3(xi + 1, yi + 1, zi), xf), yf),
+    l(l(hash3(xi, yi, zi + 1), hash3(xi + 1, yi, zi + 1), xf), l(hash3(xi, yi + 1, zi + 1), hash3(xi + 1, yi + 1, zi + 1), xf), yf),
+    zf);
+}
+
+// ── Spin: fast during the intro, easing down to an idle turn ──
+function angleAt(t) {
+  if (t <= SETTLE_AT) return SPIN_INTRO * t;
+  const d = t - SETTLE_AT, T = 1.5;
+  return SPIN_INTRO * SETTLE_AT + SPIN_IDLE * d + (SPIN_INTRO - SPIN_IDLE) * T * (1 - Math.exp(-d / T));
+}
+
+// Presents overshoot their final size and settle back, like a cartoon "pop".
+function popScale(t) {
+  const u = t - 1;
+  return 1 + 3.4 * u * u * u + 2.4 * u * u;
+}
+const giftScaleAt = (t, popAt) => (t < popAt ? 0 : popScale(clamp01((t - popAt) / GIFT_POP)));
+
+// ── Build the scene as a cloud of points in tree space (y is rows below the apex) ──
+const pts = { x: [], y: [], z: [], nx: [], ny: [], nz: [], alb: [], kind: [], slot: [], ch: [], aux: [] };
+function addPoint(x, y, z, nx, ny, nz, alb, kind, slot, ch, aux) {
+  pts.x.push(x); pts.y.push(y); pts.z.push(z); pts.nx.push(nx); pts.ny.push(ny); pts.nz.push(nz);
+  pts.alb.push(alb); pts.kind.push(kind); pts.slot.push(slot); pts.ch.push(ch); pts.aux.push(aux);
+}
+
+function tierRadius(yn) {
+  const u = Math.min(yn, 0.9999) * TIERS, k = Math.floor(u), f = u - k;
+  const end = R_BASE * (k + 1) / TIERS;
+  const start = k === 0 ? 0.4 : R_BASE * k / TIERS * 0.55;
+  return start + (end - start) * Math.pow(f, 0.9);
+}
+
+function buildFoliage() {
+  const steps = TREE_ROWS * 3;
+  for (let iy = 0; iy <= steps; iy++) {
+    const yn = iy / steps, R = tierRadius(yn);
+    const u = Math.min(yn, 0.9999) * TIERS, k = Math.floor(u), f = u - k;
+    const n = Math.max(10, Math.ceil(2 * Math.PI * R / 0.45));
+    for (let i = 0; i < n; i++) {
+      const th = (i + (iy % 2) * 0.5) / n * 2 * Math.PI, s = Math.sin(th), c = Math.cos(th);
+      const clump = noise3(s * R * 0.38 + 40, yn * TREE_ROWS * 0.75, c * R * 0.38 + 40);
+      const fine = noise3(s * R * 0.9 + 7, yn * TREE_ROWS * 1.7 + 3, c * R * 0.9 + 7);
+      const r = R * (0.88 + 0.2 * clump) + (clump - 0.5) * 1.4;   // bumpy branches
+      let alb = 0.5 + 0.45 * clump + 0.3 * fine;
+      if (k > 0) alb *= 0.4 + 0.6 * smooth(0, 0.35, f);            // shadow under the tier above
+      if (f > 0.8) alb *= 1.12;                                    // brighter branch tips
+      addPoint(r * s, yn * TREE_ROWS, r * c, 0.92 * s, 0.39, 0.92 * c, alb, FOLIAGE, S_FOL, 0, yn);
+    }
+  }
+}
+
+function buildTrunk() {
+  for (let y = TREE_ROWS - 1; y <= FLOOR_Y; y += 0.3) {
+    for (let i = 0; i < 34; i++) {
+      const th = i / 34 * 2 * Math.PI, s = Math.sin(th), c = Math.cos(th);
+      addPoint(2.6 * s, y, 2.6 * c, s, 0, c, 0.75 + 0.25 * rng(), TRUNK, S_TRUNK, i % 3 ? 124 : 33, y);
+    }
+  }
+}
+
+function buildGround() {
+  const R = 27;
+  for (let z = -R; z <= R; z += 1.2) {
+    for (let x = -R; x <= R; x += 0.5) {
+      const d = Math.hypot(x, z) / R;
+      if (d >= 1) continue;
+      const v = (noise3(x * 0.22 + 9, 3.3, z * 0.22 + 9) * 0.65 + rng() * 0.35) * (1 - d * d * 0.75);
+      if (v < 0.3) continue;
+      addPoint(x, FLOOR_Y, z, 0, 1, 0, v, GROUND, S_SNOW, 0, d);
+    }
+  }
+}
+
+function buildTinsel() {
+  const turns = 2.3;
+  for (let strand = 0; strand < 2; strand++) {
+    for (let u = 0; u <= 1;) {
+      const yn = 0.08 + 0.9 * u, th = strand * Math.PI + u * turns * 2 * Math.PI;
+      const r = tierRadius(yn) * 1.1 + 1.2;                        // hugs each tier, just outside the branches
+      const sag = 0.35 * Math.abs(Math.sin(th * 3));
+      addPoint(r * Math.sin(th), yn * TREE_ROWS + sag, r * Math.cos(th), Math.sin(th), 0.2, Math.cos(th), 1, TINSEL, S_TIN + strand, 0, u);
+      u += 0.4 / (2 * Math.PI * turns * r);
+    }
+  }
+}
+
+// Each present is placed so that, at the moment it pops, the spin has carried it to the front.
+const gifts = GIFT_SHAPES.map(([hx, h, hz], k) => {
+  const popAt = GIFT_T0 + k * GIFT_GAP;
+  const th = 0.75 - k * 0.24 - angleAt(popAt), rho = 17 + (k % 3) * 2.2;
+  return { hx, h, hz, popAt, cx: rho * Math.sin(th), cz: rho * Math.cos(th), yaw: rng() * Math.PI, colour: k % 4 };
+});
+
+function buildGifts() {
+  gifts.forEach((g, k) => {
+    const cy = Math.cos(g.yaw), sy = Math.sin(g.yaw);
+    // slot holds 0 = box, 1 = ribbon; the real colour is looked up per present at draw time
+    const put = (lx, up, lz, nx, ny, nz, ch, ribbon) =>
+      addPoint(lx * cy + lz * sy, up, -lx * sy + lz * cy, nx * cy + nz * sy, ny, -nx * sy + nz * cy, 1, PRESENT, ribbon, ch, k);
+    for (let up = 0.15; up <= g.h; up += 0.3) {
+      for (let t = -g.hx; t <= g.hx; t += 0.4) {
+        const rib = Math.abs(t) < 0.6 ? 1 : 0;
+        put(t, up, g.hz, 0, 0, 1, rib ? 124 : 35, rib); put(t, up, -g.hz, 0, 0, -1, rib ? 124 : 35, rib);
+      }
+      for (let t = -g.hz; t <= g.hz; t += 0.4) {
+        const rib = Math.abs(t) < 0.6 ? 1 : 0;
+        put(g.hx, up, t, 1, 0, 0, rib ? 124 : 35, rib); put(-g.hx, up, t, -1, 0, 0, rib ? 124 : 35, rib);
+      }
+    }
+    for (let lx = -g.hx; lx <= g.hx; lx += 0.4) {
+      for (let lz = -g.hz; lz <= g.hz; lz += 0.4) {
+        const rib = Math.abs(lx) < 0.6 || Math.abs(lz) < 0.6 ? 1 : 0;
+        put(lx, g.h, lz, 0, 1, 0, rib ? 43 : 61, rib);
+      }
+    }
+    put(0, g.h + 0.6, 0, 0, 2, 0, 38, 1); put(-1, g.h + 0.5, 0, 0, 2, 0, 37, 1); put(1, g.h + 0.5, 0, 0, 2, 0, 37, 1); // bow
+  });
+}
+
+buildFoliage(); buildTrunk(); buildGround(); buildTinsel(); buildGifts();
+const N = pts.x.length;
+const PX = Float32Array.from(pts.x), PY = Float32Array.from(pts.y), PZ = Float32Array.from(pts.z);
+const NX = Float32Array.from(pts.nx), NY = Float32Array.from(pts.ny), NZ = Float32Array.from(pts.nz);
+const ALB = Float32Array.from(pts.alb), AUX = Float32Array.from(pts.aux);
+const KIND = Uint8Array.from(pts.kind), SLOT = Uint8Array.from(pts.slot), CH = Uint8Array.from(pts.ch);
+
+function surfaceSpot() {
+  let yn;
+  do { yn = Math.sqrt(rng()); } while (yn < 0.12 || yn > 0.97 || frac(yn * TIERS) < 0.3);
+  return { th: rng() * 2 * Math.PI, yn, r: tierRadius(yn) * 1.08 + 1, ph: rng() * 6.28 };
+}
+const baubles = Array.from({ length: 30 }, (_, i) => ({ ...surfaceSpot(), slot: i % 4, big: rng() < 0.35 }));
+const lights = Array.from({ length: 46 }, (_, i) => ({ ...surfaceSpot(), slot: i % 2 ? S_SNOW : S_BAUB + (i % 4), speed: 1.5 + rng() * 2.5 }));
+const flakes = Array.from({ length: 46 }, () => ({
+  x: Math.random() * COLS, y: Math.random() * ROWS, z: -30 + Math.random() * 62,
+  v: 2 + Math.random() * 3.5, ph: Math.random() * 6.28, ch: ".'*.".charCodeAt((Math.random() * 4) | 0),
+}));
+
+// ── Frame buffers: one character, colour and depth per grid cell ──
+const zbuf = new Float32Array(COLS * ROWS), chBuf = new Uint8Array(COLS * ROWS), colBuf = new Uint8Array(COLS * ROWS), kindBuf = new Uint8Array(COLS * ROWS);
+const giftScale = new Float32Array(gifts.length);
+const GLYPH = Array.from({ length: 128 }, (_, i) => String.fromCharCode(i));
+
+function plot(col, row, z, code, color, kind) {
+  if (col < 0 || col >= COLS || row < 0 || row >= ROWS) return;
+  const idx = row * COLS + col;
+  if (z < zbuf[idx]) return;
+  zbuf[idx] = z; chBuf[idx] = code; colBuf[idx] = color; kindBuf[idx] = kind;
+}
+
+function renderScene(t, extras) {
+  zbuf.fill(-1e9); chBuf.fill(0); kindBuf.fill(0);
+  const A = angleAt(t), cA = Math.cos(A), sA = Math.sin(A);
+  const grow = easeOutCubic(clamp01(t / GROW_END));
+  const front = [easeInOutCubic(clamp01((t - TINSEL_START[0]) / TINSEL_FLOW)), easeInOutCubic(clamp01((t - TINSEL_START[1]) / TINSEL_FLOW))];
+  const trunkY = TREE_ROWS - 1 + (t - 1.3) * 8, groundD = (t - 1.4) * 1.3, tick = (t * 14) | 0;
+  for (let k = 0; k < gifts.length; k++) giftScale[k] = giftScaleAt(t, gifts[k].popAt);
+
+  for (let i = 0; i < N; i++) {
+    const kind = KIND[i], aux = AUX[i];
+    let x0 = PX[i], y0 = PY[i], z0 = PZ[i];
+    if (kind === FOLIAGE) { if (aux > grow) continue; }
+    else if (kind === TRUNK) { if (aux > trunkY) continue; }
+    else if (kind === GROUND) { if (aux > groundD) continue; }
+    else if (kind === TINSEL) { if (aux > front[SLOT[i] - S_TIN] || front[SLOT[i] - S_TIN] === 0) continue; }
+    else {
+      const s = giftScale[aux];
+      if (s < 0.03) continue;
+      const g = gifts[aux];
+      x0 = g.cx + x0 * s; z0 = g.cz + z0 * s; y0 = FLOOR_Y - y0 * s;
+    }
+    const x = x0 * cA + z0 * sA, z = -x0 * sA + z0 * cA;
+    const col = Math.floor(MID + 0.5 + x), row = Math.floor(TOP + y0 + TILT * z + 0.5);
+    if (col < 0 || col >= COLS || row < 0 || row >= ROWS) continue;
+    const idx = row * COLS + col;
+    if (z <= zbuf[idx]) continue;
+    zbuf[idx] = z;
+
+    const diff = Math.max(0, (NX[i] * cA + NZ[i] * sA) * LIGHT[0] + NY[i] * LIGHT[1] + (-NX[i] * sA + NZ[i] * cA) * LIGHT[2]);
+    let code, color;
+    if (kind === FOLIAGE) {
+      if (grow < 1 && aux > grow - 0.05) {                         // the sparkling "render line"
+        code = SPARK.charCodeAt((i + tick) % SPARK.length); color = S_SNOW * 8 + 7;
+      } else {
+        const v = Math.min(0.999, ALB[i] * (0.3 + 0.62 * diff));
+        code = FOL_RAMP.charCodeAt((v * FOL_RAMP.length) | 0); color = Math.min(7, (1.5 + v * 6.4) | 0);
+      }
+    } else if (kind === TRUNK) {
+      code = CH[i]; color = S_TRUNK * 8 + Math.min(7, (1 + (0.3 + 0.8 * diff) * ALB[i] * 5.5) | 0);
+    } else if (kind === GROUND) {
+      const v = ALB[i];
+      code = GROUND_RAMP.charCodeAt(Math.min(GROUND_RAMP.length - 1, ((v - 0.3) * 1.6 * GROUND_RAMP.length) | 0));
+      color = S_SNOW * 8 + Math.min(6, (1 + v * 6) | 0);
+    } else if (kind === TINSEL) {
+      const strand = SLOT[i] - S_TIN, f = front[strand];
+      if (f < 1 && aux > f - 0.025) { code = 42; color = S_SNOW * 8 + 7; }            // the flowing head
+      else if (frac(aux * 9 - t * 0.7 + strand * 0.37) < 0.1) { code = 42; color = SLOT[i] * 8 + 7; }  // travelling glint
+      else { code = 126; color = SLOT[i] * 8 + 4 + ((i * 7 + tick) % 3); }
+    } else {
+      const g = gifts[aux], bow = NY[i] > 1;
+      code = CH[i];
+      color = (S_GIFT + g.colour * 2 + SLOT[i]) * 8 + (bow ? 7 : Math.min(6, (1 + (0.3 + 0.8 * diff) * 5.5) | 0));
+    }
+    chBuf[idx] = code; colBuf[idx] = color; kindBuf[idx] = kind + 1;
+  }
+
+  // Baubles and fairy lights switch on as the tinsel front passes them
+  const lit = t > 4.4 ? 2 : 0.08 + 0.9 * Math.max(front[0], front[1]);
+  for (const b of baubles) {
+    if (b.yn > lit || lit <= 0.08) continue;
+    const x = b.r * Math.sin(b.th + A), z = b.r * Math.cos(b.th + A);
+    const tw = 0.5 + 0.5 * Math.sin(t * 2.6 + b.ph);
+    const code = lit - b.yn < 0.03 ? 43 : b.big ? (tw > 0.6 ? 64 : 79) : (tw > 0.8 ? 79 : 111);
+    plot(Math.floor(MID + 0.5 + x), Math.floor(TOP + b.yn * TREE_ROWS + TILT * z + 0.5), z + 0.6, code, (S_BAUB + b.slot) * 8 + 4 + ((tw * 3.99) | 0), C_BAUBLE);
+  }
+  for (const l of lights) {
+    if (l.yn > lit || lit <= 0.08) continue;
+    const tw = 0.5 + 0.5 * Math.sin(t * l.speed + l.ph);
+    if (tw < 0.25) continue;
+    const x = l.r * Math.sin(l.th + A), z = l.r * Math.cos(l.th + A);
+    plot(Math.floor(MID + 0.5 + x), Math.floor(TOP + l.yn * TREE_ROWS + TILT * z + 0.5), z + 0.5, tw > 0.75 ? 42 : tw > 0.5 ? 43 : 46, l.slot * 8 + (tw > 0.75 ? 7 : 6), C_LIGHT);
+  }
+
+  // Star: a flat sprite that squeezes to a line as it turns edge-on
+  if (t > 0.05) {
+    const squeeze = Math.abs(Math.cos(A)), pulse = 0.5 + 0.5 * Math.sin(t * 4);
+    for (let dy = 0; dy < 3; dy++) for (let dx = 2; dx >= 0; dx--) for (const sgn of dx ? [-1, 1] : [1]) {
+      let code = STAR[dy].charCodeAt(2 + sgn * dx);
+      if (code === 32) continue;
+      if (code === 42 && pulse > 0.5) code = 64;
+      plot(MID + sgn * Math.round(dx * squeeze), TOP - 2 + dy, 100 - dx, code, S_STAR * 8 + 5 + Math.round(pulse * 2), C_STAR);
+    }
+  }
+
+  if (!extras) return;
+  for (let k = 0; k < gifts.length; k++) {                         // sparkle burst as each present pops
+    const g = gifts[k], age = t - g.popAt;
+    if (age <= 0 || age > 0.5) continue;
+    const x = g.cx * cA + g.cz * sA, z = -g.cx * sA + g.cz * cA;
+    const rad = 1.5 + age * 11, code = age < 0.2 ? 42 : age < 0.35 ? 43 : 46;
+    for (let j = 0; j < 8; j++) {
+      const a = j * Math.PI / 4 + age * 2;
+      plot(Math.round(MID + x + Math.cos(a) * rad), Math.round(TOP + FLOOR_Y - g.h * 0.5 + TILT * z - Math.sin(a) * rad * 0.5), 90, code, (S_GIFT + g.colour * 2 + 1) * 8 + 7, C_FX);
+    }
+  }
+  for (const f of flakes) plot(f.x | 0, f.y | 0, f.z, f.ch, S_SNOW * 8 + 3 + (((f.z + 30) / 62 * 4.99) | 0), C_FX);
+}
+
+function stepSnow(dt, time) {
+  for (const f of flakes) {
+    f.y += f.v * dt; f.x += Math.sin(time * 0.8 + f.ph) * 0.6 * dt;
+    if (f.y >= ROWS) { f.y -= ROWS; f.x = Math.random() * COLS; }
+    if (f.x < 0) f.x += COLS; else if (f.x >= COLS) f.x -= COLS;
+  }
+}
+
+// ── Colours ──
+const store = {
+  get(k) { try { return localStorage.getItem(k); } catch { return null; } },
+  set(k, v) { try { localStorage.setItem(k, v); } catch {} },
+};
+let paletteName = PALETTES[store.get("xmas.palette")] ? store.get("xmas.palette") : "Classic";
+let themeName = THEMES[store.get("xmas.theme")] ? store.get("xmas.theme") : "midnight";
+let colorTable = [], tileMain = "#fff", tileFin = "#fff", inkMain = "#000", inkFin = "#000", ornInk = [];
+
+function buildColors() {
+  const p = PALETTES[paletteName];
+  const rgb = (h) => { const n = parseInt(h.slice(1), 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; };
+  const ink = THEMES[themeName].light ? 0.7 : 1;                   // deepen every colour on a light page
+  const mix = (a, b, t) => `rgb(${a.map((v, i) => Math.round((v + (b[i] - v) * t) * ink)).join(",")})`;
+  const bases = [null, p.trunk, p.star, p.tinsel[0], p.tinsel[1], THEMES[themeName].snow, ...p.baubles, ...p.gifts.flat()];
+  const dim = [0.3, 0.42, 0.54, 0.66, 0.78, 0.9, 1];
+  colorTable = [];
+  for (let L = 0; L < 8; L++) colorTable[L] = mix(rgb(p.foliage[0]), rgb(p.foliage[1]), L / 7);
+  for (let s = 1; s < bases.length; s++) {
+    const c = rgb(bases[s]);
+    for (let L = 0; L < 8; L++) colorTable[s * 8 + L] = L === 7 ? mix(c, [255, 255, 255], 0.45) : mix([0, 0, 0], c, dim[L]);
+  }
+  // QR tiles: bright on the dark pages, dark on the light one. Scanners judge brightness only, so each
+  // character is kept within a few percent of its tile's brightness and differs in hue instead:
+  // clear to people, invisible to a scanner.
+  const light = THEMES[themeName].light;
+  const luma = (c) => 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
+  const css = (c) => `rgb(${c.map(Math.round).join(",")})`;
+  const atLuma = (c, target) => {
+    let out = c.map((v) => Math.min(255, v * target / Math.max(1, luma(c))));
+    const l = luma(out);
+    if (l < target - 0.5) out = out.map((v) => v + (255 - v) * (target - l) / (255 - l));
+    return out;
+  };
+  const lo = rgb(p.foliage[0]), hi = rgb(p.foliage[1]);
+  const tile = light ? rgb(p.qr.dark) : lo.map((v, i) => v + (hi[i] - v) * 6 / 7);
+  const fin = light ? rgb(p.qr.accent) : rgb(p.star);
+  const step = light ? 20 : -20;
+  tileMain = css(tile); tileFin = css(fin);
+  inkMain = css(atLuma(rgb(p.qr.ink), luma(tile) + step));
+  inkFin = css(atLuma(hi, luma(fin) + step));
+  ornInk = p.baubles.map((b) => css(atLuma(rgb(b), luma(tile) + (light ? 20 : 0))));
+}
+
+// ── Layout and drawing ──
+let U = 6, dpr = 1, cssW = 0, cssH = 0, fontStr = "", fontQ = "", glowK = 1;
+
+function layout() {
+  const availW = Math.min(window.innerWidth - 32, 640), availH = Math.max(260, window.innerHeight - 200);
+  U = Math.min(availW / COLS, availH / (2 * ROWS), 10);
+  cssW = U * COLS; cssH = U * 2 * ROWS;
+  dpr = Math.min(window.devicePixelRatio || 1, 2.5);
+  art.width = Math.round(cssW * dpr); art.height = Math.round(cssH * dpr);
+  art.style.width = `${cssW}px`; art.style.height = `${cssH}px`;
+  glow.width = Math.ceil(art.width / 3); glow.height = Math.ceil(art.height / 3);
+  ctx.font = `700 100px ${FONT_STACK}`;
+  const ratio = ctx.measureText("M").width / 100 || 0.6;
+  fontStr = `700 ${Math.min(U / ratio, U * 1.9).toFixed(2)}px ${FONT_STACK}`;
+  fontQ = qr ? `700 ${Math.min(qr.mod / 2 * U / ratio, qr.mod * U * 0.95).toFixed(2)}px ${FONT_STACK}` : fontStr;
+}
+
+function beginText() {
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.globalAlpha = 1; ctx.font = fontStr; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+}
+
+function setGlow(k) {
+  if (Math.abs(k - glowK) < 0.01) return;
+  glowK = k; glow.style.setProperty("--glow-k", k.toFixed(2));
+}
+
+function drawGrid() {
+  setGlow(1);
+  beginText();
+  ctx.clearRect(0, 0, cssW, cssH);
+  let last = -1;
+  for (let row = 0, idx = 0; row < ROWS; row++) {
+    const y = (row + 0.5) * 2 * U;
+    for (let col = 0; col < COLS; col++, idx++) {
+      const code = chBuf[idx];
+      if (!code) continue;
+      const c = colBuf[idx];
+      if (c !== last) { ctx.fillStyle = colorTable[c]; last = c; }
+      ctx.fillText(GLYPH[code], (col + 0.5) * U, y);
+    }
+  }
+}
+
+function blitGlow() {
+  if (glowK === 0) return;
+  gctx.clearRect(0, 0, glow.width, glow.height);
+  gctx.drawImage(art, 0, 0, glow.width, glow.height);
+}
+
+// ── QR view: the tree's own characters regroup into the code (units: 1 = one cell width) ──
+const BASE_ROW = 33;                                     // presents and snow from this row down stay put
+const QUIET_TOP = 6, QUIET_BOTTOM = 2 * BASE_ROW - 0.8;  // band kept clear for the code and its quiet zone
+const DENSE = "#%&@#%8$";
+const STAR_CELLS = [];
+STAR.forEach((line, dy) => [...line].forEach((ch, dx) => {
+  if (ch !== " ") STAR_CELLS.push({ x: MID - 2 + dx + 0.5, y: 2 * dy + 1, code: ch.charCodeAt(0) });
+}));
+
+// Every dark module becomes two character cells side by side (a cell is half as wide as it is tall).
+function buildQR() {
+  if (typeof qrcode !== "function") return null;
+  const q = qrcode(0, "M");
+  q.addData(QR_LINK); q.make();
+  const n = q.getModuleCount();
+  const mod = Math.min(1.6, (QUIET_BOTTOM - QUIET_TOP) / (n + 8), (COLS - 0.5) / (n + 8));   // leaves a 4-module quiet zone
+  const size = n * mod, x0 = (COLS - size) / 2, y0 = QUIET_TOP + (QUIET_BOTTOM - QUIET_TOP - size) / 2;
+  const cells = [];
+  for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) {
+    if (!q.isDark(i, j)) continue;
+    const fin = (i < 7 && j < 7) || (i < 7 && j >= n - 7) || (i >= n - 7 && j < 7);
+    for (let h = 0; h < 2; h++) {
+      const u = (j + 0.25 + 0.5 * h) / n, v = (i + 0.5) / n, r = hash3(i, j, h + 5);
+      cells.push({ i, j, h, fin, u, v, x: x0 + u * size, y: y0 + v * size, glyph: DENSE.charCodeAt((r * DENSE.length) | 0) });
+    }
+  }
+  return { n, mod, size, x0, y0, cells };
+}
+
+const qr = buildQR();
+let particles = [], baseCells = [];
+
+// Turn the current tree frame into particles. Each row of the tree stretches sideways to the width
+// of the code, so the triangle squares up into the QR instead of scattering.
+function buildParticles() {
+  const rows = [], stars = [], fading = [];
+  baseCells = [];
+  for (let row = 0, idx = 0; row < ROWS; row++) {
+    let list = null;
+    for (let col = 0; col < COLS; col++, idx++) {
+      const k = kindBuf[idx];
+      if (!k) continue;
+      if (k === C_STAR) stars.push(idx);
+      else if (k === FOLIAGE + 1 || k === TINSEL + 1 || k === C_BAUBLE || k === C_LIGHT) (list || (list = [])).push(idx);
+      else if (row >= BASE_ROW) baseCells.push({ col, row, code: chBuf[idx], color: colBuf[idx] });
+      else fading.push(idx);
+    }
+    if (list) rows.push(list);
+  }
+  if (!rows.length) {                                              // tapped before anything was drawn
+    const idx = TOP * COLS + MID;
+    chBuf[idx] = 42; colBuf[idx] = S_STAR * 8 + 7; kindBuf[idx] = FOLIAGE + 1; rows.push([idx]);
+  }
+  if (!stars.length) stars.push(rows[0][0]);
+
+  const make = (idx, tx, ty, type, extra) => {
+    const col = idx % COLS, row = (idx / COLS) | 0, sx = col + 0.5, sy = 2 * row + 1;
+    const dx = tx - sx, dy = ty - sy, d = Math.hypot(dx, dy) || 1, amp = Math.min(d * 0.25, 3);
+    return { type, sx, sy, tx, ty, ax: -dy / d * amp, ay: dx / d * amp, code: chBuf[idx], color: colBuf[idx],
+             orn: kindBuf[idx] === C_BAUBLE, delay: (MORPH_STAGGER - 0.06) * row / ROWS + Math.random() * 0.06, ...extra };
+  };
+
+  particles = [];
+  const R = rows.length, used = new Uint8Array(COLS * ROWS);
+  for (const cell of qr.cells) {
+    const list = rows[Math.min(R - 1, (cell.v * R) | 0)];
+    const idx = list[Math.min(list.length - 1, (cell.u * list.length) | 0)];
+    used[idx] = 1;
+    particles.push(make(idx, cell.x, cell.y, 0, { cell }));
+  }
+  rows.forEach((list, r) => list.forEach((idx, k) => {               // leftovers drift to their spot and dissolve
+    if (!used[idx]) particles.push(make(idx, qr.x0 + (k + 0.5) / list.length * qr.size, qr.y0 + (r + 0.5) / R * qr.size, 2));
+  }));
+  STAR_CELLS.forEach((sc, k) => particles.push(make(stars[Math.floor((k + 0.5) * stars.length / STAR_CELLS.length)], sc.x, sc.y, 1, { star: sc.code })));
+  for (const idx of fading) particles.push(make(idx, (idx % COLS) + 0.5, 2 * ((idx / COLS) | 0) + 1, 3));
+}
+
+const particleEase = (p, m) => { const t = (m - p.delay) / (1 - MORPH_STAGGER); return t <= 0 ? 0 : t >= 1 ? 1 : easeInOutCubic(t); };
+
+// m = 0 is the tree, m = 1 is the finished QR; anything between is the transition.
+function drawMorph(m, time) {
+  setGlow(1 - smooth(0.4, 0.9, m));                                // bloom would blur the modules together
+  beginText();
+  ctx.clearRect(0, 0, cssW, cssH);
+
+  const qx0 = qr.x0 - 4 * qr.mod, qx1 = qr.x0 + qr.size + 4 * qr.mod;
+  for (const f of flakes) {                                        // snow keeps falling, but never across the code
+    const x = (f.x | 0) + 0.5, y = 2 * (f.y | 0) + 1;
+    if (m > 0.3 && x > qx0 && x < qx1 && y > QUIET_TOP && y < QUIET_BOTTOM) continue;
+    ctx.fillStyle = colorTable[S_SNOW * 8 + 3 + (((f.z + 30) / 62 * 4.99) | 0)];
+    ctx.fillText(GLYPH[f.ch], x * U, y * U);
+  }
+  for (const b of baseCells) {                                     // presents and snowdrift stay under the code
+    ctx.fillStyle = colorTable[b.color];
+    ctx.fillText(GLYPH[b.code], (b.col + 0.5) * U, (2 * b.row + 1) * U);
+  }
+
+  // A solid tile behind each arrived character, snapped to device pixels so the code is crisp
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  const k = U * dpr, half = qr.mod / 2;
+  for (const p of particles) {
+    if (p.type !== 0) continue;
+    const a = smooth(0.72, 1, particleEase(p, m));
+    if (a <= 0) continue;
+    const c = p.cell;
+    const x0 = Math.round((qr.x0 + (2 * c.j + c.h) * half) * k), x1 = Math.round((qr.x0 + (2 * c.j + c.h + 1) * half) * k);
+    const y0 = Math.round((qr.y0 + c.i * qr.mod) * k), y1 = Math.round((qr.y0 + (c.i + 1) * qr.mod) * k);
+    ctx.globalAlpha = a; ctx.fillStyle = c.fin ? tileFin : tileMain;
+    if (a >= 1) ctx.fillRect(x0, y0, x1 - x0, y1 - y0);
+    else { const w = (x1 - x0) * (0.3 + 0.7 * a), h = (y1 - y0) * (0.3 + 0.7 * a); ctx.fillRect((x0 + x1 - w) / 2, (y0 + y1 - h) / 2, w, h); }
+  }
+
+  const pulse = 0.5 + 0.5 * Math.sin(time * 4);
+  for (let pass = 0; pass < 2; pass++) {                           // far half in the tree's font, near half in the code's
+    beginText();
+    if (pass) ctx.font = fontQ;
+    for (const p of particles) {
+      const e = particleEase(p, m);
+      if ((e >= 0.5) !== (pass === 1)) continue;
+      let alpha = 1, code = p.code, fill = colorTable[p.color];
+      if (p.type === 2) alpha = 1 - smooth(0.3, 0.8, e);
+      else if (p.type === 3) alpha = 1 - smooth(0, 0.5, e);
+      else if (e >= 0.8) {
+        if (p.type === 1) { code = p.star === 42 && pulse > 0.5 ? 64 : p.star; fill = colorTable[S_STAR * 8 + 5 + Math.round(pulse * 2)]; }
+        else if (p.orn) fill = ornInk[((p.color >> 3) - S_BAUB) & 3];
+        else { code = p.cell.glyph; fill = p.cell.fin ? inkFin : inkMain; }
+      }
+      if (alpha <= 0.01) continue;
+      const arc = Math.sin(Math.PI * e);
+      ctx.globalAlpha = alpha; ctx.fillStyle = fill;
+      ctx.fillText(GLYPH[code], (p.sx + (p.tx - p.sx) * e + p.ax * arc) * U, (p.sy + (p.ty - p.sy) * e + p.ay * arc) * U);
+    }
+  }
+  ctx.globalAlpha = 1;
+}
+
+// ── State and main loop ──
+let view = "tree";        // which picture is settled: "tree" or "qr"
+let morph = 0, morphDir = 0;
+// Visitors whose device asks for reduced motion get a still tree and a Play button; their choice is remembered.
+let reducedMotion = prefersReduced && store.get("xmas.motion") !== "on";
+let looping = false;
+let tau = reducedMotion ? 60 : 0;   // scene time; frozen while the QR is showing
+let tapped = false, lastNow = 0, lastDraw = 0;
+
+function drawStatic() {
+  if (view === "tree") { renderScene(tau, true); drawGrid(); } else drawMorph(1, 0);
+  blitGlow();
+}
+
+function startLoop() { if (!looping) { looping = true; requestAnimationFrame(frame); } }
+
+function frame(now) {
+  if (reducedMotion) { looping = false; return; }
+  requestAnimationFrame(frame);
+  if (morphDir === 0 && now - lastDraw < 31) return;              // ~30fps when idle, full rate while morphing
+  const dt = Math.min(0.05, (now - (lastNow || now)) / 1000);
+  lastNow = lastDraw = now;
+  stepSnow(dt, now / 1000);
+  if (morphDir !== 0) {
+    morph = clamp01(morph + morphDir * dt / MORPH_SEC);
+    drawMorph(morph, now / 1000);
+    if ((morphDir > 0 && morph === 1) || (morphDir < 0 && morph === 0)) { view = morph ? "qr" : "tree"; morphDir = 0; updateHint(); }
+  } else if (view === "tree") { tau += dt; renderScene(tau, true); drawGrid(); }
+  else drawMorph(1, now / 1000);
+  blitGlow();
+}
+
+function updateHint() {
+  if (morphDir !== 0) hint.textContent = "";
+  else if (view === "qr") hint.innerHTML = `scan to connect · <a href="${QR_LINK}" target="_blank" rel="noopener">open LinkedIn</a> · tap to flip back`;
+  else hint.textContent = tapped ? "" : "tap the tree ✨";
+  stage.setAttribute("aria-label", view === "qr" && morphDir >= 0
+    ? "QR code linking to LinkedIn. Activate to show the tree again."
+    : "Spinning Christmas tree. Activate to show a QR code linking to LinkedIn.");
+}
+
+function toggle() {
+  if (!qr) { hint.innerHTML = `QR unavailable offline · <a href="${QR_LINK}" target="_blank" rel="noopener">open LinkedIn</a>`; return; }
+  tapped = true;
+  if (reducedMotion) {
+    if (view === "tree") { renderScene(tau, false); buildParticles(); view = "qr"; } else view = "tree";
+    drawStatic(); updateHint();
+    return;
+  }
+  if (morphDir !== 0) morphDir = -morphDir;                        // tapped mid-flight: turn around
+  else if (view === "tree") { renderScene(tau, false); buildParticles(); morph = 0; morphDir = 1; }
+  else { morph = 1; morphDir = -1; }
+  updateHint();
+}
+
+// ── Controls ──
+const nextKey = (obj, cur) => { const keys = Object.keys(obj); return keys[(keys.indexOf(cur) + 1) % keys.length]; };
+function refresh() { buildColors(); if (reducedMotion) drawStatic(); }
+
+function setPalette(name) { paletteName = name; store.set("xmas.palette", name); paletteBtn.textContent = `🎨 ${name}`; refresh(); }
+function setTheme(name) {
+  themeName = name; store.set("xmas.theme", name);
+  document.documentElement.dataset.theme = name; themeBtn.textContent = THEMES[name].label; refresh();
+}
+
+paletteBtn.addEventListener("click", () => setPalette(nextKey(PALETTES, paletteName)));
+themeBtn.addEventListener("click", () => setTheme(nextKey(THEMES, themeName)));
+document.getElementById("shuffleBtn").addEventListener("click", () => {
+  for (const b of baubles) b.slot = (Math.random() * 4) | 0;
+  for (const l of lights) l.slot = Math.random() < 0.5 ? S_SNOW : S_BAUB + ((Math.random() * 4) | 0);
+  for (const g of gifts) g.colour = (Math.random() * 4) | 0;
+  if (reducedMotion) drawStatic();
+});
+function updateMotionBtn() {
+  motionBtn.hidden = !prefersReduced;
+  motionBtn.textContent = reducedMotion ? "▶ Play animation" : "⏸ Hold still";
+}
+motionBtn.addEventListener("click", () => {
+  reducedMotion = !reducedMotion;
+  store.set("xmas.motion", reducedMotion ? "off" : "on");
+  updateMotionBtn();
+  if (reducedMotion) {
+    if (morphDir !== 0) { view = morphDir > 0 ? "qr" : "tree"; morphDir = 0; }
+    tau = Math.max(tau, 60);
+    drawStatic(); updateHint();
+  } else {
+    if (view === "tree") tau = 0;                                  // replay the opening
+    lastNow = 0; startLoop();
+  }
+});
+stage.addEventListener("click", toggle);
+stage.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggle(); } });
+window.addEventListener("resize", () => { layout(); if (reducedMotion) drawStatic(); });
+
+// ── Boot ──
+layout();
+setTheme(themeName);
+setPalette(paletteName);
+updateMotionBtn();
+if (reducedMotion) drawStatic(); else startLoop();
+document.fonts?.ready.then(() => { layout(); if (reducedMotion) drawStatic(); });
+</script>
+</body>
+</html>
