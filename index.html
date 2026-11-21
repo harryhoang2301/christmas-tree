@@ -9,19 +9,28 @@
   :root[data-theme="midnight"] {
     --bg: radial-gradient(ellipse at top, #1b2350 0%, #0b1026 60%, #05070f 100%);
     --fg: #e8ecff; --muted: #9aa3c7;
-    --btn-bg: rgba(255,255,255,.08); --btn-border: rgba(255,255,255,.18);
+    --btn-bg: rgba(255,255,255,.06); --btn-bg-hover: rgba(255,255,255,.12);
+    --btn-border: rgba(255,255,255,.14); --btn-border-hover: rgba(255,255,255,.32);
+    --btn-shadow: 0 8px 22px rgba(0,0,0,.28); --btn-sheen: rgba(255,255,255,.10);
+    --accent: #9db4ff; --orb: linear-gradient(135deg, #3a4a9a, #0b1026);
     --glow-opacity: .6;
   }
   :root[data-theme="snow"] {
     --bg: linear-gradient(#f7fafd, #dfe8f1);
     --fg: #1b2433; --muted: #5b6676;
-    --btn-bg: rgba(0,0,0,.05); --btn-border: rgba(0,0,0,.15);
+    --btn-bg: rgba(255,255,255,.66); --btn-bg-hover: rgba(255,255,255,.95);
+    --btn-border: rgba(30,50,80,.12); --btn-border-hover: rgba(30,50,80,.3);
+    --btn-shadow: 0 8px 22px rgba(40,60,90,.13); --btn-sheen: rgba(255,255,255,.9);
+    --accent: #3b6fb5; --orb: linear-gradient(135deg, #ffffff, #b9cbdf);
     --glow-opacity: 0;
   }
   :root[data-theme="cozy"] {
     --bg: radial-gradient(ellipse at top, #7a1620 0%, #4a0d12 60%, #2a0609 100%);
     --fg: #ffe8d6; --muted: #e0b8a8;
-    --btn-bg: rgba(255,255,255,.08); --btn-border: rgba(255,232,214,.25);
+    --btn-bg: rgba(255,236,222,.07); --btn-bg-hover: rgba(255,236,222,.14);
+    --btn-border: rgba(255,232,214,.18); --btn-border-hover: rgba(255,232,214,.4);
+    --btn-shadow: 0 8px 22px rgba(0,0,0,.3); --btn-sheen: rgba(255,236,222,.10);
+    --accent: #ffcf9e; --orb: linear-gradient(135deg, #c22b3a, #3a090d);
     --glow-opacity: .55;
   }
 
@@ -53,12 +62,42 @@
   #hint a { color: inherit; }
 
   .controls { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
-  .controls button {
-    font: inherit; font-size: 1rem; color: var(--fg);
+  .ctl {
+    display: inline-flex; align-items: center; gap: 11px;
+    height: 52px; padding: 0 18px 0 14px; border-radius: 16px;
+    font: inherit; color: var(--fg); text-align: left; cursor: pointer;
     background: var(--btn-bg); border: 1px solid var(--btn-border);
-    padding: 12px 18px; min-height: 48px; border-radius: 999px; cursor: pointer;
+    box-shadow: inset 0 1px 0 var(--btn-sheen), var(--btn-shadow);
+    -webkit-backdrop-filter: blur(12px) saturate(1.3); backdrop-filter: blur(12px) saturate(1.3);
+    transition: transform .16s ease, background-color .2s ease, border-color .2s ease;
+    -webkit-tap-highlight-color: transparent;
   }
-  .controls button:active { transform: scale(.97); }
+  .ctl[hidden] { display: none; }
+  .ctl:hover { background: var(--btn-bg-hover); border-color: var(--btn-border-hover); transform: translateY(-1px); }
+  .ctl:active { transform: scale(.97); }
+  .ctl:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+  .ctl small {
+    display: block; margin-bottom: 4px; line-height: 1;
+    font-size: .62rem; font-weight: 600; letter-spacing: .14em; text-transform: uppercase; color: var(--muted);
+  }
+  .ctl b { display: block; font-size: .93rem; font-weight: 600; line-height: 1.1; white-space: nowrap; }
+  .ctl svg { width: 20px; height: 20px; flex: none; }
+  .ctl.icon { width: 52px; padding: 0; justify-content: center; color: var(--muted); }
+  .ctl.icon:hover { color: var(--fg); }
+  .ctl.icon svg { transition: transform .45s cubic-bezier(.3, 1.4, .5, 1); }
+  .ctl.icon.spun svg { transform: rotate(180deg); }
+  .swatch { display: inline-flex; flex: none; }
+  .swatch i { width: 15px; height: 15px; border-radius: 50%; box-shadow: 0 0 0 1.5px var(--btn-border-hover); }
+  .swatch i + i { margin-left: -5px; }
+  .orb { width: 22px; height: 22px; flex: none; border-radius: 50%; background: var(--orb); box-shadow: 0 0 0 1.5px var(--btn-border-hover); }
+  @media (prefers-reduced-motion: reduce) { .ctl, .ctl.icon svg { transition: none; } }
+  @media (max-width: 400px) {
+    .controls { gap: 7px; }
+    .ctl { height: 50px; padding: 0 12px 0 10px; gap: 8px; border-radius: 14px; }
+    .ctl b { font-size: .87rem; }
+    .ctl.icon { width: 46px; }
+    .swatch i { width: 13px; height: 13px; }
+  }
 </style>
 </head>
 <body>
@@ -69,11 +108,22 @@
     <canvas id="art" aria-hidden="true"></canvas>
   </div>
   <p id="hint">tap the tree ✨</p>
-  <div class="controls">
-    <button id="paletteBtn" type="button"></button>
-    <button id="shuffleBtn" type="button" aria-label="Shuffle the decorations">🎲</button>
-    <button id="themeBtn" type="button"></button>
-    <button id="motionBtn" type="button" hidden></button>
+  <div class="controls" role="group" aria-label="Appearance">
+    <button id="paletteBtn" class="ctl" type="button">
+      <span class="swatch" aria-hidden="true"><i></i><i></i><i></i></span>
+      <span><small>Tree</small><b id="paletteLabel"></b></span>
+    </button>
+    <button id="shuffleBtn" class="ctl icon" type="button" aria-label="Shuffle the decorations">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 3h5v5M4 20 21 3M21 16v5h-5M15 15l6 6M4 4l5 5"/></svg>
+    </button>
+    <button id="themeBtn" class="ctl" type="button">
+      <span class="orb" aria-hidden="true"></span>
+      <span><small>Page</small><b id="themeLabel"></b></span>
+    </button>
+    <button id="motionBtn" class="ctl" type="button" hidden>
+      <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path id="motionPath" d=""/></svg>
+      <span><small>Motion</small><b id="motionLabel"></b></span>
+    </button>
   </div>
 </main>
 
@@ -84,37 +134,37 @@ const QR_LINK = "https://www.linkedin.com/in/harry-hoang23/";
 // ───────────────────────────────────────────────────────────────────────────
 
 // foliage: [shadow, highlight] · gifts: [box, ribbon]
-// qr: dark/accent are the module and corner colours on the light page (keep them dark); ink is the hue of the characters on the tiles
+// qr: tile and corner are the soft module colours of the code; ink and cornerInk are the hues of the characters printed on them
 const PALETTES = {
   Classic: {
     foliage: ["#114a26", "#5df089"], trunk: "#9a6534", star: "#ffe066", tinsel: ["#ffd166", "#dfe9ff"],
     baubles: ["#ff3b4e", "#ffd166", "#4cc9f0", "#ff7ad9"],
     gifts: [["#d62839", "#ffe066"], ["#2a7de1", "#ffffff"], ["#8e44ad", "#ffd166"], ["#f2f2f2", "#d62839"]],
-    qr: { dark: "#0b3d20", accent: "#9e1226", ink: "#ff7a1a" },
+    qr: { tile: "#78bf96", corner: "#e0cb90", ink: "#2f8f5f", cornerInk: "#c9a85c" },
   },
   Icy: {
     foliage: ["#12395e", "#9bdcff"], trunk: "#8d99ae", star: "#e8fbff", tinsel: ["#c8f1ff", "#ffffff"],
     baubles: ["#ffffff", "#90e0ef", "#b8c0ff", "#48cae4"],
     gifts: [["#3a86ff", "#ffffff"], ["#b8c0ff", "#3a0ca3"], ["#e0fbfc", "#48cae4"], ["#5e60ce", "#caf0f8"]],
-    qr: { dark: "#0b2545", accent: "#1d4e89", ink: "#c9a0ff" },
+    qr: { tile: "#93bfdc", corner: "#cfd6ee", ink: "#3f7fb5", cornerInk: "#7f86c9" },
   },
   Neon: {
     foliage: ["#0c4a3a", "#2dffb0"], trunk: "#b026ff", star: "#fffb00", tinsel: ["#ff3df2", "#00e5ff"],
     baubles: ["#ff00ff", "#00e5ff", "#fffb00", "#ff3864"],
     gifts: [["#ff00ff", "#00e5ff"], ["#00e5ff", "#fffb00"], ["#fffb00", "#ff00ff"], ["#ff3864", "#ffffff"]],
-    qr: { dark: "#2a0845", accent: "#7a0064", ink: "#ff3df2" },
+    qr: { tile: "#74dcc0", corner: "#c3a6ee", ink: "#18a89a", cornerInk: "#8a4fd6" },
   },
   "Candy Cane": {
     foliage: ["#8a1230", "#ffd9e0"], trunk: "#c9184a", star: "#ffd166", tinsel: ["#ffffff", "#ff4d6d"],
     baubles: ["#ffffff", "#2ec4b6", "#ffd166", "#ff0a54"],
     gifts: [["#ffffff", "#ff0a54"], ["#ff0a54", "#ffffff"], ["#2ec4b6", "#ffffff"], ["#ffb3c1", "#c9184a"]],
-    qr: { dark: "#7d0a1e", accent: "#0b5c55", ink: "#ff0a54" },
+    qr: { tile: "#eeb4c0", corner: "#f2e6cb", ink: "#d6456a", cornerInk: "#c9a24a" },
   },
 };
 const THEMES = {
-  midnight: { label: "🌙 Midnight", snow: "#ffffff" },
-  snow:     { label: "❄️ Snow",     snow: "#8192a8", light: true },
-  cozy:     { label: "🔥 Cosy",     snow: "#fff1e0" },
+  midnight: { label: "Midnight", snow: "#ffffff" },
+  snow:     { label: "Snow",     snow: "#8192a8", light: true },
+  cozy:     { label: "Cosy",     snow: "#fff1e0" },
 };
 
 // ── Scene dimensions. One grid cell is 1 unit wide and 2 units tall. ──
@@ -147,7 +197,9 @@ const art = document.getElementById("art"), glow = document.getElementById("glow
 const ctx = art.getContext("2d"), gctx = glow.getContext("2d");
 const stage = document.getElementById("stage"), hint = document.getElementById("hint");
 const paletteBtn = document.getElementById("paletteBtn"), themeBtn = document.getElementById("themeBtn");
-const motionBtn = document.getElementById("motionBtn");
+const motionBtn = document.getElementById("motionBtn"), shuffleBtn = document.getElementById("shuffleBtn");
+const paletteLabel = document.getElementById("paletteLabel"), themeLabel = document.getElementById("themeLabel");
+const swatchDots = paletteBtn.querySelectorAll(".swatch i");
 const prefersReduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 // ── Small maths helpers ──
@@ -452,7 +504,7 @@ function buildColors() {
     const c = rgb(bases[s]);
     for (let L = 0; L < 8; L++) colorTable[s * 8 + L] = L === 7 ? mix(c, [255, 255, 255], 0.45) : mix([0, 0, 0], c, dim[L]);
   }
-  // QR tiles: bright on the dark pages, dark on the light one. Scanners judge brightness only, so each
+  // QR tiles: soft and light on the dark pages, the same hues deepened on the light one. Scanners judge brightness only, so each
   // character is kept within a few percent of its tile's brightness and differs in hue instead:
   // clear to people, invisible to a scanner.
   const light = THEMES[themeName].light;
@@ -464,14 +516,14 @@ function buildColors() {
     if (l < target - 0.5) out = out.map((v) => v + (255 - v) * (target - l) / (255 - l));
     return out;
   };
-  const lo = rgb(p.foliage[0]), hi = rgb(p.foliage[1]);
-  const tile = light ? rgb(p.qr.dark) : lo.map((v, i) => v + (hi[i] - v) * 6 / 7);
-  const fin = light ? rgb(p.qr.accent) : rgb(p.star);
+  const tile = light ? atLuma(rgb(p.qr.tile), 78) : rgb(p.qr.tile);
+  const fin = light ? atLuma(rgb(p.qr.corner), 78) : rgb(p.qr.corner);
   const step = light ? 20 : -20;
   tileMain = css(tile); tileFin = css(fin);
   inkMain = css(atLuma(rgb(p.qr.ink), luma(tile) + step));
-  inkFin = css(atLuma(hi, luma(fin) + step));
-  ornInk = p.baubles.map((b) => css(atLuma(rgb(b), luma(tile) + (light ? 20 : 0))));
+  inkFin = css(atLuma(rgb(p.qr.cornerInk), luma(fin) + step));
+  // ornaments on the code: bauble colours, calmed halfway towards the tile
+  ornInk = p.baubles.map((b) => css(atLuma(rgb(b).map((v, i) => (v + tile[i]) / 2), luma(tile) + (light ? 20 : 0))));
 }
 
 // ── Layout and drawing ──
@@ -719,15 +771,26 @@ function toggle() {
 const nextKey = (obj, cur) => { const keys = Object.keys(obj); return keys[(keys.indexOf(cur) + 1) % keys.length]; };
 function refresh() { buildColors(); if (reducedMotion) drawStatic(); }
 
-function setPalette(name) { paletteName = name; store.set("xmas.palette", name); paletteBtn.textContent = `🎨 ${name}`; refresh(); }
+function setPalette(name) {
+  paletteName = name; store.set("xmas.palette", name);
+  const p = PALETTES[name];
+  [p.foliage[1], p.baubles[0], p.star].forEach((c, i) => { swatchDots[i].style.background = c; });
+  paletteLabel.textContent = name;
+  paletteBtn.setAttribute("aria-label", `Tree colours: ${name}. Press to change.`);
+  refresh();
+}
 function setTheme(name) {
   themeName = name; store.set("xmas.theme", name);
-  document.documentElement.dataset.theme = name; themeBtn.textContent = THEMES[name].label; refresh();
+  document.documentElement.dataset.theme = name;
+  themeLabel.textContent = THEMES[name].label;
+  themeBtn.setAttribute("aria-label", `Page theme: ${THEMES[name].label}. Press to change.`);
+  refresh();
 }
 
 paletteBtn.addEventListener("click", () => setPalette(nextKey(PALETTES, paletteName)));
 themeBtn.addEventListener("click", () => setTheme(nextKey(THEMES, themeName)));
-document.getElementById("shuffleBtn").addEventListener("click", () => {
+shuffleBtn.addEventListener("click", () => {
+  shuffleBtn.classList.toggle("spun");
   for (const b of baubles) b.slot = (Math.random() * 4) | 0;
   for (const l of lights) l.slot = Math.random() < 0.5 ? S_SNOW : S_BAUB + ((Math.random() * 4) | 0);
   for (const g of gifts) g.colour = (Math.random() * 4) | 0;
@@ -735,7 +798,9 @@ document.getElementById("shuffleBtn").addEventListener("click", () => {
 });
 function updateMotionBtn() {
   motionBtn.hidden = !prefersReduced;
-  motionBtn.textContent = reducedMotion ? "▶ Play animation" : "⏸ Hold still";
+  document.getElementById("motionLabel").textContent = reducedMotion ? "Play" : "Pause";
+  document.getElementById("motionPath").setAttribute("d", reducedMotion ? "M8 5v14l11-7z" : "M7 5h4v14H7zM13 5h4v14h-4z");
+  motionBtn.setAttribute("aria-label", reducedMotion ? "Play the animation" : "Pause the animation");
 }
 motionBtn.addEventListener("click", () => {
   reducedMotion = !reducedMotion;
